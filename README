@@ -1,0 +1,8 @@
+
+Scripts that get US Bank account information, such as available balance, by logging
+into their website and scraping the information off the webpages.
+
+See usbank.rb for the main logic.  You will need to edit quite a few things for it to work.
+
+Warning: not very polished, but I've had several requests to put this up, so enjoy!
+

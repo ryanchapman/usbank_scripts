@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 #
 #
 # Note: to find xpath's (if this breaks), then use SelectorGadget.com (it will at least identify the class easily
@@ -21,19 +21,22 @@ require 'pp'
 
 # Be sure to fill in these values...
 
-$USERID = "rXXX"
+$USERID = "bill9123"
 
 # Challenge questions are just regular expressions.  I prefer .*? non-greedy
 $CHALLENGE_QUESTION1 = /high.*?school.*?graduated/
 $CHALLENGE_ANSWER1 = 'valdosta'
 
 $CHALLENGE_QUESTION2 = /maternal.*?grandfather.*?name/
-$CHALLENGE_ANSWER2 = 'bill'
+$CHALLENGE_ANSWER2 = 'steve'
 
 $CHALLENGE_QUESTION3 = /year.*?married/
 $CHALLENGE_ANSWER3 = '1900'
 
-$PASSWORD = 'abcXXX'
+$PASSWORD = 'MyPass123'
+
+# download with 'curl http://curl.haxx.se/ca/cacert.pem > ~/bin/cacert.pem'
+ca_file = File.expand_path "~/bin/cacert.pem"
 
 
 # No need to modify anything below (hopefully)
@@ -63,21 +66,22 @@ end
 ##########
 
 agent = Mechanize.new{|a| a.log = Logger.new(STDERR) }
+agent.agent.http.ca_file = ca_path
 
 # ENTRY PAGE
-page = agent.get 'https://www.usbank.com'
+page = agent.get 'https://www4.usbank.com/internetBanking/RequestRouter?requestCmdId=DisplayLoginPage'
 
 # debug -- print all forms
 #pp page.forms
 
-form = page.forms_with(:action => 'https://www4.usbank.com/internetBanking/RequestRouter?src=Homepage').first
+form = page.forms_with(:action => '/internetBanking/RequestRouter').first
 form.field_with(:name => 'USERID').value = $USERID
 form.field_with(:name => 'requestCmdId').value = 'VALIDATEID'
-form.field_with(:name => 'reqcrda').value = $USERID
-form.field_with(:name => 'reqcrdb').value = ''
-form.field_with(:name => 'NONCE').value = 'NoNonce'
-form.field_with(:name => 'MACHINEATTR').value = $MACHINEATTR
-form.field_with(:name => 'bankLogin').option_with(:value => 'internetBanking').select
+#form.field_with(:name => 'reqcrda').value = $USERID
+#form.field_with(:name => 'reqcrdb').value = ''
+#form.field_with(:name => 'NONCE').value = 'NoNonce'
+#form.field_with(:name => 'MACHINEATTR').value = $MACHINEATTR
+#form.field_with(:name => 'bankLogin').option_with(:value => 'internetBanking').select
 
 page2 = agent.submit form
 

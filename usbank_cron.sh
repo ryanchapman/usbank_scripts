@@ -3,7 +3,7 @@
 TMP=/tmp/$(basename $0).$$
 EMAIL="US BANK ERROR <ryan@heatery.com>"
 
-~root/bin/usbank.rb 2>&1 >$TMP
+~/bin/usbank.rb 2>&1 >$TMP
 if [[ $? != 0 ]]; then
 	# error
 	cat $TMP | EMAIL="$EMAIL" mutt -s "ERROR: usbank.rb" ryan@heatery.com

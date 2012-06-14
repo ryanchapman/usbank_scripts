@@ -6,7 +6,24 @@ EMAIL="US BANK ERROR <ryan@heatery.com>"
 ~/bin/usbank.rb 2>&1 >$TMP
 if [[ $? != 0 ]]; then
 	# error
-	cat $TMP | EMAIL="$EMAIL" mutt -s "ERROR: usbank.rb" ryan@heatery.com
+   (
+    cat <<vEOF
+From: US BANK <ryan@heatery.com>
+To: ryan@heatery.com
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+ boundary="PAA08673.1018277622/server.domain.com"
+Subject: ERROR
+
+This is a MIME-encapsulated message
+
+--PAA08673.1018277622/server.domain.com
+Content-Type: text/html
+
+vEOF
+cat $TMP
+echo "--PAA08673.1018277622/server.domain.com"
+    ) | /usr/sbin/sendmail -t
 	exit 0
 fi
 

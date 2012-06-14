@@ -21,6 +21,8 @@ require 'pp'
 
 # Be sure to fill in these values...
 
+$SMTP_SERVER = 'localhost'
+
 $USERID = "bill9123"
 
 # Challenge questions are just regular expressions.  I prefer .*? non-greedy
@@ -30,6 +32,7 @@ $CHALLENGE_ANSWER1 = 'valdosta'
 $CHALLENGE_QUESTION2 = /maternal.*?grandfather.*?name/
 $CHALLENGE_ANSWER2 = 'steve'
 
+#$CHALLENGE_QUESTION3 = /year.*?graduate.*?college/
 $CHALLENGE_QUESTION3 = /year.*?married/
 $CHALLENGE_ANSWER3 = '1900'
 
@@ -54,7 +57,7 @@ Subject: #{subject}
 
 #{message}
 vEOF
-  Net::SMTP.start('localhost') do |smtp|
+  Net::SMTP.start($SMTP_SERVER) do |smtp|
     smtp.send_message msg, from, to
   end
 end
@@ -118,7 +121,7 @@ page3 = agent.submit form
 
 
 # PASSWORD ENTRY PAGE
-pp page3.body
+#pp page3.body
 form = page3.forms_with(:action => '/internetBanking/RequestRouter').first
 form.field_with(:name => 'requestCmdId').value = 'Logon'
 form.add_field!('PSWD', $PASSWORD)
@@ -129,6 +132,17 @@ form.add_field!('LOGINSESSIONID', loginsessionid_field)
 
 page4 = agent.submit form
 
+# Page 4 could be an internet message.  View the message later.
+form = page4.forms_with(:action => '/internetBanking/RequestRouter').first
+if form.nil?
+    balance_page = page4
+else
+    form.field_with(:name => 'requestCmdId').value = 'SubmitRIBNotification'
+    form.field_with(:name => 'viewAgainLater').value = true
+    page5 = agent.submit form
+    balance_page = page5
+end
+
 
 # THE MEAT!  Balances, transactions, ...
 f = File.open("/tmp/output.html", "w")
@@ -136,12 +150,13 @@ f.puts "<html><body>"
 f.puts "<table>"
 
 # table headers
-page4.parser.xpath("/html/body/table[3]/tr/td[3]/table[2]").each do |line|
+#pp balance_page.body
+balance_page.parser.xpath("/html/body/table[3]/tr/td[3]/table[2]").each do |line|
   f.puts line.to_s.gsub(/<\/?(img|a)[^>]*?>/i, "") 
 end
 
 # enumerate accounts and balances
-page4.parser.xpath("/html/body/table[3]/tr/td[3]/table[3]").each do |line|
+balance_page.parser.xpath("/html/body/table[3]/tr/td[3]/table[3]").each do |line|
   f.puts line.to_s.gsub(/<\/?(img|a)[^>]*?>/i, "") 
 end
 

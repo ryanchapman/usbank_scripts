@@ -1,4 +1,3 @@
-#!/usr/bin/env ruby
 #
 #
 # Note: to find xpath's (if this breaks), then use SelectorGadget.com (it will at least identify the class easily
@@ -156,6 +155,7 @@ balance_page.parser.xpath("/html/body/table[3]/tr/td[3]/table[2]").each do |line
 end
 
 # enumerate accounts and balances
+#print "ENUM BALANCES:"
 balance_page.parser.xpath("/html/body/table[3]/tr/td[3]/table[3]").each do |line|
   f.puts line.to_s.gsub(/<\/?(img|a)[^>]*?>/i, "") 
 end
@@ -165,7 +165,26 @@ f.puts "</table>"
 
 
 # print current pending transactions
-# TODO
+#print "BALANCE PAGE:"
+#pp balance_page
+link = balance_page.parser.xpath("/html/body/table[3]/tr/td[3]/table[3]/tr[3]/td[3]/a").first
+#print "LINK:"
+#pp link
+# mechanize doesn't appear to handle javascript: links, so manually handle for now
+uri = ""
+link.attributes.each do |k,v|
+  if k == "onclick"
+    uri = v.to_s.gsub(/^.*?\'|\'.*$/, "").gsub("requestCmdId=AccountDetails", "requestCmdId=DISPLAYAUTHORIZATIONS")
+  end
+end
+pending_transactions_page = agent.get uri 
+
+#print "\nPENDING TRANSACTIONS:\n"
+#pp pending_transactions_page
+pending_transactions_page.parser.xpath("/html/body/table[2]/tr/td[2]/table/tr[5]/td[2]/table").each do |line|
+  f.puts line.to_s.gsub(/<\/?(img|a)[^>]*?>/i, "") 
+end
+
 
 # Done with output
 f.puts "</html>"

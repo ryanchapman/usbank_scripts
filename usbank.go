@@ -14,6 +14,9 @@
  *   CHALLENGE_ANSWER4   - Answer to ID Shield question 4
  *   CHALLENGE_QUESTION5 - Your ID Shield question 5
  *   CHALLENGE_ANSWER5   - Answer to ID Shield question 5
+ *   and if you use stathat, then
+ *   STATHAT_STATNAME    - passed to PostEZValue(statName, ..., ...)
+ *   STATHAT_EZKEY       - passed to PostEZValue(..., ezkey, ...)
  *
  *  That's it!  
  *  Compile with "go build usbank.go"
@@ -38,6 +41,7 @@ import (
           "github.com/moovweb/gokogiri"
     ghtml "github.com/moovweb/gokogiri/html"
     gxml  "github.com/moovweb/gokogiri/xml"
+          "github.com/stathat/go"
           "html"
           "io"
           "io/ioutil"
@@ -46,12 +50,17 @@ import (
           "net/url"
           "os"
           "regexp"
+          "strconv"
           "strings"
 )
 
 const (
     USERNAME = "bill9123"
     PASSWORD = "MyPass123"
+
+    // Leave alone if you don't use stathat
+    STATHAT_STATNAME = ""
+    STATHAT_EZKEY = ""
 
     // We support three to five possible challenge questions.  To find them, 
     //  sign into usbank.com, 
@@ -68,7 +77,7 @@ const (
     CHALLENGE_QUESTION2 = `maternal.*?grandfather.*?name`
     CHALLENGE_ANSWER2 = "steve"
 
-    CHALLENGE_QUESTION3 = `year.*?married`
+    CHALLENGE_QUESTION3 = `year.*?graduate.*?college`
     CHALLENGE_ANSWER3 = "1900"
 
     CHALLENGE_QUESTION4 = ``
@@ -298,6 +307,20 @@ func usage() {
     os.Exit(1)
 }
 
+func postToStatHat(doc *ghtml.HtmlDocument) {
+    xpath := `/html/body/table[3]/tr/td[3]/table[3]/tr[3]/td[13]/text()`
+    checkingBalanceStr := fmt.Sprintf("%s", docSearch(doc, "checkingBalance", "postToStatHat", xpath)[0])
+    re := regexp.MustCompile(`([^0-9\.]*?)([0-9\.]+)`)
+    checkingBalanceStr = re.ReplaceAllString(checkingBalanceStr, "$2")
+    checkingBalance, err := strconv.ParseFloat(checkingBalanceStr, 64)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error converting checking balance into float: %v\n", err)
+        os.Exit(1)
+    }
+    stathat.PostEZValue(STATHAT_STATNAME, STATHAT_EZKEY, checkingBalance)
+}
+
+
 func main() {
     flag.Parse()
     if outputFile == "<file>" || help == true {
@@ -314,6 +337,9 @@ func main() {
     }
     doc := printAccountsSummary(passwordResp, file)
     printPendingTransactions(doc, file)
+    if STATHAT_STATNAME != "" && STATHAT_EZKEY != "" {
+        postToStatHat(doc)
+    }
     doc.Free()
     fmt.Fprintf(file, "</html>\n")
     file.Close()

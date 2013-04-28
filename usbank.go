@@ -90,6 +90,7 @@ const (
     ROUTERURL   = "https://www4.usbank.com/internetBanking/RequestRouter"
     ENTRYPARAMS = "?requestCmdId=DisplayLoginPage"
     MACHINEATTR = "colordepth=32|width=1266|height=768|availWidth=1366|availHeight=740|platform=Win32|javaEnabled=No|userAgent=Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Trident/4.0; .NET CLR 2.0.50727; .NET CLR 3.0.04506.648; .NET 3.5.21022)"
+    USERAGENT   = "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Trident/4.0; .NET CLR 2.0.50727; .NET CLR 3.0.04506.648; .NET 3.5.21022)"
 )
 
 var client *http.Client
@@ -100,6 +101,7 @@ func httpReq(reqType string, url string, body io.Reader, pageName string) (*http
         fmt.Fprintf(os.Stderr, "Error creating http request for %s page: %v\n", pageName)
         os.Exit(1)
     }
+    req.Header.Set("User-Agent", USERAGENT)
     if reqType == "POST" {
         req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
     }
@@ -317,7 +319,10 @@ func postToStatHat(doc *ghtml.HtmlDocument) {
         fmt.Fprintf(os.Stderr, "Error converting checking balance into float: %v\n", err)
         os.Exit(1)
     }
-    stathat.PostEZValue(STATHAT_STATNAME, STATHAT_EZKEY, checkingBalance)
+    err = stathat.PostEZValue(STATHAT_STATNAME, STATHAT_EZKEY, checkingBalance)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error posting to stathat: %v\n", err)
+    }
 }
 
 

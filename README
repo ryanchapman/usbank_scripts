@@ -20,9 +20,13 @@ GOLANG: Significantly faster than the ruby version and is quite a bite easier to
 	   CHALLENGE_ANSWER4   - Answer to ID Shield question 4
 	   CHALLENGE_QUESTION5 - Your ID Shield question 5
 	   CHALLENGE_ANSWER5   - Answer to ID Shield question 5
+           and if you use stathat, then
+           STATHAT_STATNAME    - passed to PostEZValue(statName, ..., ...)
+           STATHAT_EZKEY       - passed to PostEZValue(..., ezkey, ...)
 
 	  That's it!
-	  Compile with "go get github.com/moovweb/gokogiri ; go build usbank.go"
+
+	  Compile with "go get github.com/moovweb/gokogiri ; go get github.com/stathat/go ; go build usbank.go"
 	  Execute this program with -outputFile FILE for where you want the HTML written
 	  You can then email FILE to yourself from a bash script. See usbank_cron2.sh
 	  for an example.
@@ -33,5 +37,4 @@ Warning: not very polished, but it works.
 
 
 Ryan A. Chapman
-Sat Apr 27 21:43:49 MDT 2013
-
+Sun Apr 28 00:23:42 MDT 2013

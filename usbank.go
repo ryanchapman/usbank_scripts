@@ -98,7 +98,7 @@ var client *http.Client
 func httpReq(reqType string, url string, body io.Reader, pageName string) (*http.Response) {
     req, err := http.NewRequest(reqType, url, body)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "Error creating http request for %s page: %v\n", pageName)
+        fmt.Fprintf(os.Stderr, "Error creating http request for %s page: %v\n", pageName, err)
         os.Exit(1)
     }
     req.Header.Set("User-Agent", USERAGENT)
@@ -135,14 +135,14 @@ func httpPost(url string, values url.Values, pageName string) (*http.Response) {
 func parsePage(httpresp *http.Response, pageName string) (*ghtml.HtmlDocument) {
     page, err := ioutil.ReadAll(httpresp.Body)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "Error reading %s html body: %v\n", pageName)
+        fmt.Fprintf(os.Stderr, "Error reading %s html body: %v\n", pageName, err)
         os.Exit(1)
     }
     httpresp.Body.Close()
 
     doc, err := gokogiri.ParseHtml(page)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "Error parsing %s html body: %v\n", err)
+        fmt.Fprintf(os.Stderr, "Error parsing %s html body: %v\n", pagename, err)
         os.Exit(1)
     }
     return doc

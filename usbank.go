@@ -170,12 +170,12 @@ func getEntryPage() {
 }
 
 func submitUsername() (*http.Response) {
-    values := url.Values{"USERID": {USERNAME}, 
-                                    "requestCmdId": {"VALIDATEID"},
-                                    "reqcrda":      {USERNAME},
-                                    "reqcrdb":      {""},
-                                    "NONCE":        {"NoNonce"},
-                                    "MACHINEATTR":  {MACHINEATTR},
+    values := url.Values{"USERID":       {USERNAME}, 
+                         "requestCmdId": {"VALIDATEID"},
+                         "reqcrda":      {USERNAME},
+                         "reqcrdb":      {""},
+                         "NONCE":        {"NoNonce"},
+                         "MACHINEATTR":  {MACHINEATTR},
                         }
     resp := httpPost(ROUTERURL, values, "submitUsername")
     return resp
@@ -224,16 +224,16 @@ func submitChallenge(usernameResp *http.Response) (*http.Response, string) {
     challengeAnswer := getChallengeAnswer(challengeQuestion)
 
     values := url.Values{"requestCmdId":                      {"VALIDATECHALLENGE"},
-                          "CHALLENGETYPE":                     {"QA"},
-                          "ANSWER":                            {challengeAnswer},
-                          "CHALLENGEANSWER":                   {challengeAnswer},
-                          "MACHINEATTR":                       {MACHINEATTR},
-                          "doubleClick":                       {"1"},
-                          "USEDSINGLEACCESSCODE":              {"FALSE"},
-                          "EASTEPUPCHECKRESPONSESTEPUPREASON": {"ENROLLED"},
-                          "TYPE":                              {"ALPHANUM"},
-                          "BALDERDASH":                        {balderdash},
-                         }
+                         "CHALLENGETYPE":                     {"QA"},
+                         "ANSWER":                            {challengeAnswer},
+                         "CHALLENGEANSWER":                   {challengeAnswer},
+                         "MACHINEATTR":                       {MACHINEATTR},
+                         "doubleClick":                       {"1"},
+                         "USEDSINGLEACCESSCODE":              {"FALSE"},
+                         "EASTEPUPCHECKRESPONSESTEPUPREASON": {"ENROLLED"},
+                         "TYPE":                              {"ALPHANUM"},
+                         "BALDERDASH":                        {balderdash},
+                        }
    resp := httpPost(ROUTERURL, values, "challenge")
    return resp, loginSessionId
 }

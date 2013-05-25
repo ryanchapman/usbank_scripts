@@ -142,7 +142,7 @@ func parsePage(httpresp *http.Response, pageName string) (*ghtml.HtmlDocument) {
 
     doc, err := gokogiri.ParseHtml(page)
     if err != nil {
-        fmt.Fprintf(os.Stderr, "Error parsing %s html body: %v\n", pagename, err)
+        fmt.Fprintf(os.Stderr, "Error parsing %s html body: %v\n", pageName, err)
         os.Exit(1)
     }
     return doc
@@ -287,7 +287,11 @@ func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) {
     doc = parsePage(resp, "pendingTransactionsTable")
     
     xpath = `/html/body/table[2]/tr/td[2]/table/tr[5]/td[2]/table`
-    pendingTrxTable := fmt.Sprintf("%s", docSearch(doc, "pendingTransactionsTable", "pendingTransactions", xpath)[0])
+    elementArray, _ := doc.Root().Search(xpath)	// make sure there are some pending transactions
+    pendingTrxTable := ""
+    if len(elementArray) != 0 {
+        pendingTrxTable = fmt.Sprintf("%s", docSearch(doc, "pendingTransactionsTable", "pendingTransactions", xpath)[0])
+    }
 
     re = regexp.MustCompile(`</?(img|a)[^>]*?>`)
     pendingTrxTable = re.ReplaceAllLiteralString(pendingTrxTable, "")

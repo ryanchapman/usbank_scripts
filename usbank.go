@@ -148,8 +148,11 @@ func parsePage(httpresp *http.Response, pageName string) (*ghtml.HtmlDocument) {
     return doc
 }
 
-func docSearch(doc *ghtml.HtmlDocument, elementName string, pageName string, xpath string) ([]gxml.Node) {
+func docSearch(doc *ghtml.HtmlDocument, elementName string, pageName string, xpath string, mustFind bool) ([]gxml.Node) {
     elementArray, err := doc.Root().Search(xpath)
+    if (err != nil || len(elementArray) == 0) && mustFind == false {
+        return nil
+    }
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error locating element \"%s\" in page %s (incorrect xpath?): %v\n", elementName, pageName, err)
         //fmt.Fprintf(os.Stderr, " doc=%+v\n", doc)
@@ -211,13 +214,14 @@ func submitChallenge(usernameResp *http.Response) (*http.Response, string) {
     doc := parsePage(usernameResp, "challenge")
 
     xpath := `/html/body/table[3]/tr/td[3]/form/table[2]/tr/td/table/tr[2]/td[3]/table/tr[6]/td[2]/text()`
-    challengeQuestion := fmt.Sprintf("%s", docSearch(doc, "challenge question", "challenge", xpath)[0])
+    mustFind := true
+    challengeQuestion := fmt.Sprintf("%s", docSearch(doc, "challenge question", "challenge", xpath, mustFind)[0])
 
     xpath = `/html/body/table[3]/tr/td[3]/form/table[2]/tr/td/table/tr[2]/td[3]/table/tr[3]/td[3]/input/@value`
-    loginSessionId := fmt.Sprintf("%s", docSearch(doc, "LOGINSESSIONID", "challenge", xpath)[0])
+    loginSessionId := fmt.Sprintf("%s", docSearch(doc, "LOGINSESSIONID", "challenge", xpath, mustFind)[0])
 
     xpath = `//input[@type="hidden"][@name="BALDERDASH"]/@value`
-    balderdash:= fmt.Sprintf("%s", docSearch(doc, "BALDERDASH", "challenge", xpath)[0])
+    balderdash:= fmt.Sprintf("%s", docSearch(doc, "BALDERDASH", "challenge", xpath, mustFind)[0])
 
     doc.Free()
 
@@ -242,7 +246,8 @@ func submitPassword(challengeResp *http.Response, loginSessionId string) (*http.
     doc := parsePage(challengeResp, "password")
 
     xpath := `//input[@type="hidden"][@name="BALDERDASH"]/@value`
-    balderdash:= fmt.Sprintf("%s", docSearch(doc, "BALDERDASH", "password", xpath)[0])
+    mustFind := true
+    balderdash:= fmt.Sprintf("%s", docSearch(doc, "BALDERDASH", "password", xpath, mustFind)[0])
 
     doc.Free()
 
@@ -258,22 +263,42 @@ func submitPassword(challengeResp *http.Response, loginSessionId string) (*http.
     return resp
 }
 
-func printAccountsSummary(passwordResp *http.Response, outputFile *os.File) (*ghtml.HtmlDocument) {
-    doc := parsePage(passwordResp, "accountsSummary")
+func handleMessageToUser(passwordResp *http.Response) (*ghtml.HtmlDocument) {
+    doc := parsePage(passwordResp, "passwordResponse")
+    
+    xpath := `//img[contains(@alt, 'View Again Later')]`
+    mustFind := false
+    found := docSearch(doc, "ViewAgainLater", "handleMessageToUser", xpath, mustFind)
+    if found != nil {
+        values := url.Values{"requestCmdId":                      {"SubmitRIBNotification"},
+                             "NEWENTERPRISESESSION":              {"TRUE"},
+                             "responseIdPostNotification":        {"DisplayAccountSummaryPage"},
+                             "viewAgainLater":                    {"true"},
+                            }
+        resp := httpPost(ROUTERURL, values, "handleMessageToUser")
 
-    tableHeaders := fmt.Sprintf("%s", docSearch(doc, "tableHeaders", "accountsSummary", `/html/body/table[3]/tr/td[3]/table[2]`)[0])
-    accountsAndBalances := fmt.Sprintf("%s", docSearch(doc, "accountsAndBalances", "accountsSummary", `/html/body/table[3]/tr/td[3]/table[3]`)[0])
+        doc = parsePage(resp, "handleMessageToUser_submitViewAgainLater")
+    }
+
+    return doc 
+}
+
+func printAccountsSummary(accountBalancesDoc *ghtml.HtmlDocument, outputFile *os.File) (*ghtml.HtmlDocument) {
+    mustFind := true
+    tableHeaders := fmt.Sprintf("%s", docSearch(accountBalancesDoc, "tableHeaders", "accountsSummary", `/html/body/table[3]/tr/td[3]/table[2]`, mustFind)[0])
+    accountsAndBalances := fmt.Sprintf("%s", docSearch(accountBalancesDoc, "accountsAndBalances", "accountsSummary", `/html/body/table[3]/tr/td[3]/table[3]`, mustFind)[0])
 
     re := regexp.MustCompile(`</?(img|a)[^>]*?>`)
     tableHeaders = re.ReplaceAllLiteralString(tableHeaders, "")
     accountsAndBalances = re.ReplaceAllLiteralString(accountsAndBalances, "")
     fmt.Fprintf(outputFile, "<html>\n<body>\n%s\n%s\n\n", tableHeaders, accountsAndBalances)
-    return doc
+    return accountBalancesDoc
 }
 
 func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) {
     xpath := `/html/body/table[3]/tr/td[3]/table[3]/tr[3]/td[3]/a`
-    link := fmt.Sprintf("%s", docSearch(doc, "pendingTransactionsLink", "pendingTransactions", xpath)[0])
+    mustFind := true
+    link := fmt.Sprintf("%s", docSearch(doc, "pendingTransactionsLink", "pendingTransactions", xpath, mustFind)[0])
 
     // pull the query string out of this: <a href="#" onclick="javascript:handlePageLink('/internetBanking/RequestRouter?requestCmdId=AccountDetails&amp;ACCOUNTLISTITEM=-2f504786%3A13e4de3653c%3A3401%7E117.20.52.58.221');return false;" name="accountInfo">Ryan Checking</a>
     re := regexp.MustCompile(`(^[^\?]*?)(\?[^\']*?)\'(.*?$)`)
@@ -290,7 +315,7 @@ func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) {
     elementArray, _ := doc.Root().Search(xpath)	// make sure there are some pending transactions
     pendingTrxTable := ""
     if len(elementArray) != 0 {
-        pendingTrxTable = fmt.Sprintf("%s", docSearch(doc, "pendingTransactionsTable", "pendingTransactions", xpath)[0])
+        pendingTrxTable = fmt.Sprintf("%s", docSearch(doc, "pendingTransactionsTable", "pendingTransactions", xpath, mustFind)[0])
     }
 
     re = regexp.MustCompile(`</?(img|a)[^>]*?>`)
@@ -315,7 +340,8 @@ func usage() {
 
 func postToStatHat(doc *ghtml.HtmlDocument) {
     xpath := `/html/body/table[3]/tr/td[3]/table[3]/tr[3]/td[13]/text()`
-    checkingBalanceStr := fmt.Sprintf("%s", docSearch(doc, "checkingBalance", "postToStatHat", xpath)[0])
+    mustFind := true
+    checkingBalanceStr := fmt.Sprintf("%s", docSearch(doc, "checkingBalance", "postToStatHat", xpath, mustFind)[0])
     re := regexp.MustCompile(`([^0-9\.]*?)([0-9\.]+)`)
     checkingBalanceStr = re.ReplaceAllString(checkingBalanceStr, "$2")
     checkingBalance, err := strconv.ParseFloat(checkingBalanceStr, 64)
@@ -339,12 +365,13 @@ func main() {
     usernameResp := submitUsername()                                // returns challenge entry page
     challengeResp, loginSessionId := submitChallenge(usernameResp)  // returns password entry page
     passwordResp := submitPassword(challengeResp, loginSessionId)   // returns account balances page
+    accountBalancesDoc := handleMessageToUser(passwordResp)         // returns account balances doc
     file, err := os.Create(outputFile)
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error opening output file \"%s\" for writing: %v\n", outputFile, err)
         os.Exit(1)
     }
-    doc := printAccountsSummary(passwordResp, file)
+    doc := printAccountsSummary(accountBalancesDoc, file)
     printPendingTransactions(doc, file)
     if STATHAT_STATNAME != "" && STATHAT_EZKEY != "" {
         postToStatHat(doc)

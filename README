@@ -1,47 +1,53 @@
 
-Scripts that get US Bank account information, such as available balance, by logging
-into their website and scraping the information off the webpages.
+Program that gets US Bank account information (balances and pending transactions),
+by logging into their website and scraping the information off the webpages.
 
-	To use, change the following constants below:
-	   USERNAME - your username for USBank.com online banking
-	   PASSWORD - online banking password
-	   CHALLENGE_QUESTION1 - Your ID Shield question 1
-	   CHALLENGE_ANSWER1   - Answer to ID Shield question 1
-	   CHALLENGE_QUESTION2 - Your ID Shield question 3
-	   CHALLENGE_ANSWER2   - Answer to ID Shield question 2
-	   CHALLENGE_QUESTION3 - Your ID Shield question 3
-	   CHALLENGE_ANSWER3   - Answer to ID Shield question 3
-	   CHALLENGE_QUESTION4 - Your ID Shield question 4
-	   CHALLENGE_ANSWER4   - Answer to ID Shield question 4
-	   CHALLENGE_QUESTION5 - Your ID Shield question 5
-	   CHALLENGE_ANSWER5   - Answer to ID Shield question 5
+To use, change the following constants below:
+   USERNAME - your username for USBank.com online banking
+   PASSWORD - online banking password
+   CHALLENGE_QUESTION1 - Your ID Shield question 1
+   CHALLENGE_ANSWER1   - Answer to ID Shield question 1
+   CHALLENGE_QUESTION2 - Your ID Shield question 3
+   CHALLENGE_ANSWER2   - Answer to ID Shield question 2
+   CHALLENGE_QUESTION3 - Your ID Shield question 3
+   CHALLENGE_ANSWER3   - Answer to ID Shield question 3
+   CHALLENGE_QUESTION4 - Your ID Shield question 4
+   CHALLENGE_ANSWER4   - Answer to ID Shield question 4
+   CHALLENGE_QUESTION5 - Your ID Shield question 5
+   CHALLENGE_ANSWER5   - Answer to ID Shield question 5
 
-	  That's it!
+  That's it!
 
-	  Compile with "go get github.com/moovweb/gokogiri ; go get github.com/stathat/go ; go build usbank.go"
-	  Execute this program with -outputFile FILE for where you want the HTML written
-	  You can then email FILE to yourself from a bash script. See usbank_cron2.sh
-	  for an example.
+  Compile with:
+    $ go get github.com/moovweb/gokogiri ; 
+    $ go get github.com/stathat/go 
+    $ go build usbank.go"
+  Execute the program with 
+    $ ./usbank -outputFile FILE 
+  where FILE is where you want the HTML written
 
-	 Note: golang1.1 is required (for cookie support)
+  You can then email FILE to yourself from a bash script. See usbank_cron2.sh
+  for an example.
 
-       The output from the program looks something like:
+ Note: golang1.1 is required (for cookie support)
 
-          Deposit Accounts
-                                                      Account  Available
-            Account                Account Type       Balance	 Balance
-            Ryan Checking - 1234   CHECKING         $2,345.67   $1,234.56
-            Ryan Savings - 9876    SAVINGS          $9,876.54   $9,876.54
-            TOTAL                                   $12222.21   $11111.10
+The output from the program looks something like:
 
-          Pending Transactions
+ Deposit Accounts
+                                             Account   Available
+   Account                Account Type       Balance	 Balance
+   Ryan Checking - 1234   CHECKING         $2,345.67   $1,234.56
+   Ryan Savings - 9876    SAVINGS          $9,876.54   $9,876.54
+   TOTAL                                   $12222.21   $11111.10
 
-            Date                Description                             Card Ending In	Amount Held
-            1/2/2014 8:08:18 PM	Montana Ale Works                       2233                 $10.98
-            1/4/2014 1:53:56 AM	Burger Bobs                             2233                 $54.95
-            1/4/2014 4:05:10 PM	Bridger Bowl                            2233                 $51.00
-            1/4/2014 4:52:40 PM	Pour House                              2233                 $30.00
-            TOTAL                                                                           $146.93
+ Pending Transactions
+
+   Date                Description                             Card Ending In	Amount Held
+   1/2/2014 8:08:18 PM	Montana Ale Works                       2233                 $10.98
+   1/4/2014 1:53:56 AM	Burger Bobs                             2233                 $54.95
+   1/4/2014 4:05:10 PM	Bridger Bowl                            2233                 $51.00
+   1/4/2014 4:52:40 PM	Pour House                              2233                 $30.00
+   TOTAL                                                                           $146.93
 
 
 Warning: not very polished, but it works.

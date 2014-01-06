@@ -507,7 +507,7 @@ func main() {
     doc := printAccountsSummary(accountBalancesDoc, file)
     printPendingTransactions(doc, file)
     doc.Free()
-    fmt.Fprintf(file, "</html>\n")
+    fmt.Fprintf(file, "</body></html>\n")
     file.Close()
     fmt.Printf("Wrote account balances and pending transactions to %s\n", outputFile)
     os.Exit(0)

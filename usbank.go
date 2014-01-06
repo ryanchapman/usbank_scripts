@@ -33,12 +33,12 @@
 package main
 
 import (
+    json  "encoding/json"
           "flag"
           "fmt"
           "github.com/moovweb/gokogiri"
     ghtml "github.com/moovweb/gokogiri/html"
     gxml  "github.com/moovweb/gokogiri/xml"
-          "html"
           "io"
           "io/ioutil"
           "net/http"
@@ -46,6 +46,7 @@ import (
           "net/url"
           "os"
           "regexp"
+          "strconv"
           "strings"
 )
 
@@ -63,7 +64,7 @@ const (
     // Leave challenge question/answers 4 and 5 empty is you only use 3 (the minimum)
     // Below, .*? is used where you find spaces in your questions
     CHALLENGE_QUESTION1 = `high.*?school.*?graduated`
-    CHALLENGE_ANSWER1 = "valdosta"
+    CHALLENGE_ANSWER1 = "bozeman"
 
     CHALLENGE_QUESTION2 = `maternal.*?grandfather.*?name`
     CHALLENGE_ANSWER2 = "steve"
@@ -84,9 +85,46 @@ const (
     USERAGENT   = "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Trident/4.0; .NET CLR 2.0.50727; .NET CLR 3.0.04506.648; .NET 3.5.21022)"
 )
 
+type UserAndAccountsT struct {
+    UserInfoResponse struct {
+        FirstName string
+        LastName string
+        DateLastSignOn string
+        DateLastSignOnString string
+        Email string
+    }
+    AccountBalancesResponse []struct {
+        Index float64
+        DisplayName string
+        AccountType string
+        AccountNumber string
+        CurrentBalanceSpecified bool
+        CurrentBalance string
+        CurrentBalanceString string
+        AvailableBalanceSpecified bool
+        AvailableBalance string
+        AvailableBalanceString string
+        AvailableBalanceValue float64
+        RecentTrxDownloadStartDate string
+        RecentTrxDownloadEndDate string
+    }
+}
+var UserAndAccounts UserAndAccountsT 
+
+type TransactionsT struct {
+    Transactions []struct {
+        Description string
+        PostedAmount float64
+        PostedAmountAsString string
+        PostedDate string
+        CardIdentifier string
+    }
+}
+var PendingTransactions TransactionsT
+
 var client *http.Client
 
-func httpReq(reqType string, url string, body io.Reader, pageName string) (*http.Response) {
+func httpReq(reqType string, payloadType string, url string, body io.Reader, pageName string) (*http.Response) {
     req, err := http.NewRequest(reqType, url, body)
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error creating http request for %s page: %v\n", pageName, err)
@@ -94,7 +132,11 @@ func httpReq(reqType string, url string, body io.Reader, pageName string) (*http
     }
     req.Header.Set("User-Agent", USERAGENT)
     if reqType == "POST" {
-        req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+        if payloadType == "json" {
+            req.Header.Set("Content-Type", "application/json")
+        } else {
+            req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+        }
     }
     if client == nil {
         jar, err := cjar.New(nil)
@@ -113,13 +155,19 @@ func httpReq(reqType string, url string, body io.Reader, pageName string) (*http
 }
 
 func httpGet(url string, pageName string) (*http.Response) {
-    resp := httpReq("GET", url, nil, pageName)
+    resp := httpReq("GET", "", url, nil, pageName)
     return resp
 }
 
 func httpPost(url string, values url.Values, pageName string) (*http.Response) {
     body := strings.NewReader(values.Encode())
-    resp := httpReq("POST", url, body, pageName)
+    resp := httpReq("POST", "", url, body, pageName)
+    return resp
+}
+
+func httpPostJson(url string, json string, pageName string) (*http.Response) {
+    body := strings.NewReader(json)
+    resp := httpReq("POST", "json", url, body, pageName)
     return resp
 }
 
@@ -137,6 +185,16 @@ func parsePage(httpresp *http.Response, pageName string) (*ghtml.HtmlDocument) {
         os.Exit(1)
     }
     return doc
+}
+
+func parseJson(httpresp *http.Response, pageName string) ([]byte) {
+    page, err := ioutil.ReadAll(httpresp.Body)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error reading %s html body: %v\n", pageName, err)
+        os.Exit(1)
+    }
+    httpresp.Body.Close()
+    return page
 }
 
 func docSearch(doc *ghtml.HtmlDocument, elementName string, pageName string, xpath string, mustFind bool) ([]gxml.Node) {
@@ -274,45 +332,146 @@ func handleMessageToUser(passwordResp *http.Response) (*ghtml.HtmlDocument) {
     return doc 
 }
 
+func handleMMSSODoc(mmssoDoc *ghtml.HtmlDocument) (*ghtml.HtmlDocument) {
+    xpath := `//form[contains(@name, 'MMSSO')]/@action`
+    mustFind := true
+
+    // we are looking for this: <form name="MMSSO" method="POST" action="https://onlinebanking.usbank.com/USB/LoginLanding.aspx?Dest=CustomerDashboard&amp;RIBALIVEURL=https%3A%2F%2Fwww4.usbank.com%2FinternetBanking%2FHeartBeatServlet&amp;RIBLOGOUTURL=https%3A%2F%2Fwww4.usbank.com%2FinternetBanking%2FRequestRouter%3FrequestCmdId%3DLogout&amp;RIBACCOUNTSURL=https%3A%2F%2Fwww4.usbank.com%2FinternetBanking%2FRequestRouter%3FrequestCmdId%3DDisplayAccountSummaryPage">
+    mmssoFormAction := docSearch(mmssoDoc, "FormNamedMMSSO", "handleMMSSODoc", xpath, mustFind)[0].Content()
+
+    resp := httpPost(mmssoFormAction, nil, "handleMMSSODoc")
+
+    accountBalancesDoc := parsePage(resp, "handleMMSSODoc")
+    fmt.Printf("accountBalancesDoc=%+v\n", accountBalancesDoc)
+    return accountBalancesDoc
+}
+
 func printAccountsSummary(accountBalancesDoc *ghtml.HtmlDocument, outputFile *os.File) (*ghtml.HtmlDocument) {
     mustFind := true
-    tableHeaders := fmt.Sprintf("%s", docSearch(accountBalancesDoc, "tableHeaders", "accountsSummary", `/html/body/table[3]/tr/td[3]/table[3]`, mustFind)[0])
-    accountsAndBalances := fmt.Sprintf("%s", docSearch(accountBalancesDoc, "accountsAndBalances", "accountsSummary", `/html/body/table[3]/tr/td[3]/table[4]`, mustFind)[0])
+    pageJavascript := fmt.Sprintf("%s", docSearch(accountBalancesDoc, "CommonDataHelper.UserAndAccountsFromServer", "accountsSummary", `//script[contains(text(), 'CommonDataHelper.UserAndAccountsFromServer')]`, mustFind)[0])
 
-    re := regexp.MustCompile(`</?(img|a)[^>]*?>`)
-    tableHeaders = re.ReplaceAllLiteralString(tableHeaders, "")
-    accountsAndBalances = re.ReplaceAllLiteralString(accountsAndBalances, "")
-    fmt.Fprintf(outputFile, "<html>\n<body>\n%s\n%s\n\n", tableHeaders, accountsAndBalances)
+    re := regexp.MustCompile(`CommonDataHelper\.UserAndAccountsFromServer.*`)
+    userAndAccountsJsonArray := re.FindAllString(pageJavascript, 1)
+    if userAndAccountsJsonArray == nil {
+        fmt.Fprintf(os.Stderr, "Could not find CommonDataHelper.UserAndAccountsFromServer in any script tag within page")
+        os.Exit(1)
+    }
+    userAndAccountsJson := userAndAccountsJsonArray[0]
+   
+    // Strip "CommonDataHelper.UserAndAccountsFromServer = " from beginning of json; also remove ending semicolon
+    re = regexp.MustCompile(`CommonDataHelper\.UserAndAccountsFromServer\s*?=\s*?([^;]*?);`)
+    userAndAccountsJson = re.ReplaceAllString(userAndAccountsJson, "$1")
+
+    err := json.Unmarshal([]byte(userAndAccountsJson), &UserAndAccounts)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Could not deserialize UserAndAccounts JSON:\n err=%+v\n json=%+v\n)\n", err, userAndAccountsJson)
+        os.Exit(1)
+    }
+
+    fmt.Fprintf(outputFile, "<html>\n<body>\n<h3>Deposit Accounts</h3>\n")
+    fmt.Fprintf(outputFile, "<table width=586 border=0>\n<tr><td width=40%%>Account</td><td>Account Type</td>")
+    fmt.Fprintf(outputFile, "<td align=right>Account<br>Balance</td><td align=right><b>Available<br>Balance</b></td></tr>\n")
+
+    totalCurrentBalance, totalAvailableBalance := 0.00, 0.00
+    for _, acct := range UserAndAccounts.AccountBalancesResponse {
+        // skip check cards (PLAS) and loan accounts
+        if acct.AccountType == "PLAS" || acct.AccountType == "INSL" {
+            continue
+        }
+        availableBalance := acct.AvailableBalanceString
+        // acct.AvailableBalanceValue is not provided by USBank, so we must calculate it with acct.AvailableBalanceString
+        availableBalanceValue, err := strconv.ParseFloat(strings.Replace(strings.Replace(acct.AvailableBalanceString, "$", "", -1), ",", "", -1), 64)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Could not convert AvailableBalanceString to an integer: err=%+v\n", err)
+            os.Exit(1)
+        }
+        totalAvailableBalance += availableBalanceValue
+
+        // acct.CurrentBalanceValue is not provided by USBank, so we must calculate it with acct.CurrentBalanceString
+        currentBalanceValue, err := strconv.ParseFloat(strings.Replace(strings.Replace(acct.CurrentBalanceString, "$", "", -1), ",", "", -1), 64)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Could not convert CurrentBalanceString to an integer: err=%+v\n", err)
+            os.Exit(1)
+        }
+        totalCurrentBalance += currentBalanceValue
+        fmt.Fprintf(outputFile, "<tr>\n")
+        fmt.Fprintf(outputFile, "<td>%s</td>\n", acct.DisplayName)
+        fmt.Fprintf(outputFile, "<td>%s</td>\n", acct.AccountType)
+        fmt.Fprintf(outputFile, "<td align=right>%s</td>\n", acct.CurrentBalanceString)
+        fmt.Fprintf(outputFile, "<td align=right>%s</td>\n", availableBalance)
+        fmt.Fprintf(outputFile, "</tr>\n")
+    }
+    fmt.Fprintf(outputFile, "<tr>\n")
+    fmt.Fprintf(outputFile, "<td colspan=2><b>TOTAL</b></td>\n")
+    fmt.Fprintf(outputFile, "<td align=right><b>$%2.2f</b></td>\n", totalCurrentBalance)
+    fmt.Fprintf(outputFile, "<td align=right><b>$%2.2f</b></td>", totalAvailableBalance)
+    fmt.Fprintf(outputFile, "</tr>\n")
+    fmt.Fprintf(outputFile, "</table>\n")
     return accountBalancesDoc
 }
 
 func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) {
-    xpath := `//a[@name="accountInfo"]`
     mustFind := true
-    link := fmt.Sprintf("%s", docSearch(doc, "pendingTransactionsLink", "pendingTransactions", xpath, mustFind)[0])
+    pageJavascript := fmt.Sprintf("%s", docSearch(doc, "CDDashBoardHelper.urls.AccountDashboard", "pendingTransactions", `//script[contains(text(), 'CDDashBoardHelper.urls.AccountDashboard')]`, mustFind)[0])
 
-    // pull the query string out of this: <a href="#" onclick="javascript:handlePageLink('/internetBanking/RequestRouter?requestCmdId=AccountDetails&amp;ACCOUNTLISTITEM=-2f504786%3A13e4de3653c%3A3401%7E117.20.52.58.221');return false;" name="accountInfo">Ryan Checking</a>
-    re := regexp.MustCompile(`(^[^\?]*?)(\?[^\']*?)\'(.*?$)`)
-    queryString := html.UnescapeString(re.ReplaceAllString(link, "$2"))
-
-    // change requestCmdId to DISPLAYAUTHORIZATIONS to get to the pending transactions page
-    re = regexp.MustCompile(`AccountDetails`)
-    queryString = re.ReplaceAllLiteralString(queryString, "DISPLAYAUTHORIZATIONS")
-
-    resp := httpGet(ROUTERURL + queryString, "pendingTransactions")
-    doc = parsePage(resp, "pendingTransactionsTable")
-    
-    xpath = `/html/body/table[2]/tr/td[2]/table/tr[5]/td[2]/table`
-    elementArray, _ := doc.Root().Search(xpath)	// make sure there are some pending transactions
-    pendingTrxTable := ""
-    if len(elementArray) != 0 {
-        pendingTrxTable = fmt.Sprintf("%s", docSearch(doc, "pendingTransactionsTable", "pendingTransactions", xpath, mustFind)[0])
+    re := regexp.MustCompile(`CDDashBoardHelper\.urls\.AccountDashboard.*`)
+    acctDashboardUrlArray := re.FindAllString(pageJavascript, 1)
+    if acctDashboardUrlArray == nil {
+        fmt.Fprintf(os.Stderr, "Could not find CDDashBoardHelper.urls.AccountDashboard in any script tag within page")
+        os.Exit(1)
+    }
+    acctDashboardUrl := acctDashboardUrlArray[0]
+   
+    // We now have 'CDDashBoardHelper.urls.AccountDashboard = "/USB/af(51wu9DKg8Sf5bqSWTRi5)/AccountDashboard/Index";'
+    // Strip all but "/USB/af(51wu9DKg8Sf5bqSWTRi5)/AccountDashboard/Index"
+    //re = regexp.MustCompile(`CDDashBoardHelper\.urls\.AccountDashboard\s*?=\s*?([^;]*?);`)
+    re = regexp.MustCompile(`[^/]*?/USB/([^/]*?)/.*?`)
+    acctUrlKey := re.FindStringSubmatch(acctDashboardUrl)[1]
+    if acctUrlKey == "" {
+        fmt.Fprintf(os.Stderr, "Could not find key (usually looks like /USB/key/AccountDashboard/Index) in AccountDashboard URL \"%s\"\n", acctDashboardUrl)
+        os.Exit(1)
     }
 
-    re = regexp.MustCompile(`</?(img|a)[^>]*?>`)
-    pendingTrxTable = re.ReplaceAllLiteralString(pendingTrxTable, "")
+    var acctIndex float64 = -1 
+    // find the index of first checking account
+    for _, acct := range UserAndAccounts.AccountBalancesResponse {
+        if acct.AccountType == "CHECKING" {
+            fmt.Printf("acctIndx=%f", acct.Index)
+            acctIndex = acct.Index
+        }
+    } 
+    // if we couldn't find a checking account, exit function
+    if acctIndex == -1 {
+        return
+    }
 
-    fmt.Fprintf(outputFile, "%s\n", pendingTrxTable)
+    requestJson := fmt.Sprintf(`{"AccountIndex":%0.0f}`, acctIndex)
+    url := fmt.Sprintf(`https://onlinebanking.usbank.com/USB/%s/AccountDashboard/GetCheckCardAuthorization`, acctUrlKey)
+    resp := httpPostJson(url, requestJson, "pendingTransactions")
+    pendingTransactionsJson := parseJson(resp, "pendingTransactions")
+
+    err := json.Unmarshal(pendingTransactionsJson, &PendingTransactions)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Could not deserialize PendingTransactions JSON:\n err=%+v\n json=%+v\n)\n", err, pendingTransactionsJson)
+        os.Exit(1)
+    }
+
+    fmt.Fprintf(outputFile, "<p><h3>Pending Transactions</h3></p>\n")
+    fmt.Fprintf(outputFile, "<table width=586 border=0>\n")
+    fmt.Fprintf(outputFile, "<tr><td>Date</td><td>Description</td><td>Card Ending In</td><td align=right>Amount Held</td></tr>\n")
+    totalPending := 0.0
+    for _, trx := range PendingTransactions.Transactions {
+        fmt.Fprintf(outputFile, "<tr>\n")
+        fmt.Fprintf(outputFile, "<td>%s</td>\n", trx.PostedDate)
+        fmt.Fprintf(outputFile, "<td>%s</td>\n", trx.Description)
+        fmt.Fprintf(outputFile, "<td align=center>%s</td>\n", trx.CardIdentifier)
+        fmt.Fprintf(outputFile, "<td align=right>%s</td>\n", trx.PostedAmountAsString)
+        fmt.Fprintf(outputFile, "</tr>\n")
+      
+        totalPending += trx.PostedAmount
+    }
+    fmt.Fprintf(outputFile, "<tr><td colspan=3 align=left><b>TOTAL</b></td><td align=right>$%2.2f</td></tr>\n", totalPending)
+    fmt.Fprintf(outputFile, "</table>\n")
 }
 
 var outputFile string
@@ -338,7 +497,8 @@ func main() {
     usernameResp := submitUsername()                                // returns challenge entry page
     challengeResp, loginSessionId := submitChallenge(usernameResp)  // returns password entry page
     passwordResp := submitPassword(challengeResp, loginSessionId)   // returns account balances page
-    accountBalancesDoc := handleMessageToUser(passwordResp)         // returns account balances doc
+    mmssoDoc := handleMessageToUser(passwordResp)                   // returns an intermediate MMSSO page, which just has a form that is autoclicked via body.onLoad
+    accountBalancesDoc := handleMMSSODoc(mmssoDoc)                  // returns account balances doc
     file, err := os.Create(outputFile)
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error opening output file \"%s\" for writing: %v\n", outputFile, err)

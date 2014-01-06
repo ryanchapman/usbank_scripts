@@ -2,11 +2,6 @@
 Scripts that get US Bank account information, such as available balance, by logging
 into their website and scraping the information off the webpages.
 
-There are two versions available, ruby and golang.
-
-RUBY: See usbank.rb for the main logic.  You will need to edit quite a few things for it to work.
-
-GOLANG: Significantly faster than the ruby version and is quite a bite easier to get working.
 	To use, change the following constants below:
 	   USERNAME - your username for USBank.com online banking
 	   PASSWORD - online banking password
@@ -20,9 +15,6 @@ GOLANG: Significantly faster than the ruby version and is quite a bite easier to
 	   CHALLENGE_ANSWER4   - Answer to ID Shield question 4
 	   CHALLENGE_QUESTION5 - Your ID Shield question 5
 	   CHALLENGE_ANSWER5   - Answer to ID Shield question 5
-           and if you use stathat, then
-           STATHAT_STATNAME    - passed to PostEZValue(statName, ..., ...)
-           STATHAT_EZKEY       - passed to PostEZValue(..., ezkey, ...)
 
 	  That's it!
 
@@ -33,8 +25,26 @@ GOLANG: Significantly faster than the ruby version and is quite a bite easier to
 
 	 Note: golang1.1 is required (for cookie support)
 
-Warning: not very polished, but it works.
+       The output from the program looks something like:
 
+          Deposit Accounts
+                                                      Account  Available
+            Account                Account Type       Balance	 Balance
+            Ryan Checking - 1234   CHECKING         $2,345.67   $1,234.56
+            Ryan Savings - 9876    SAVINGS          $9,876.54   $9,876.54
+            TOTAL                                   $12222.21   $11111.10
+
+          Pending Transactions
+
+            Date                Description                             Card Ending In	Amount Held
+            1/2/2014 8:08:18 PM	Montana Ale Works                       2233                 $10.98
+            1/4/2014 1:53:56 AM	Burger Bobs                             2233                 $54.95
+            1/4/2014 4:05:10 PM	Bridger Bowl                            2233                 $51.00
+            1/4/2014 4:52:40 PM	Pour House                              2233                 $30.00
+            TOTAL                                                                           $146.93
+
+
+Warning: not very polished, but it works.
 
 Ryan A. Chapman
 Sun Apr 28 00:23:42 MDT 2013

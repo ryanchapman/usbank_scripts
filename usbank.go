@@ -79,10 +79,9 @@ const (
     CHALLENGE_ANSWER5 = ""
 
     // Shouldn't need to change anything below
-    ROUTERURL   = "https://www4.usbank.com/internetBanking/RequestRouter"
-    ENTRYPARAMS = "?requestCmdId=DisplayLoginPage"
-    MACHINEATTR = "colordepth=32|width=1266|height=768|availWidth=1366|availHeight=740|platform=Win32|javaEnabled=No|userAgent=Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Trident/4.0; .NET CLR 2.0.50727; .NET CLR 3.0.04506.648; .NET 3.5.21022)"
-    USERAGENT   = "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Trident/4.0; .NET CLR 2.0.50727; .NET CLR 3.0.04506.648; .NET 3.5.21022)"
+    ROUTERURL   = "https://onlinebanking.usbank.com"
+    MACHINEATTR = "colorDepth=24|width=1440|height=900|availWidth=1387|availHeight=878|platform=MacIntel|javaEnabled=No|userAgent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:30."
+    USERAGENT   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:30."
 )
 
 type UserAndAccountsT struct {
@@ -124,7 +123,7 @@ var PendingTransactions TransactionsT
 
 var client *http.Client
 
-func httpReq(reqType string, payloadType string, url string, body io.Reader, pageName string) (*http.Response) {
+func httpReq(reqType string, payloadType string, url string, referer string, body io.Reader, pageName string) (*http.Response) {
     req, err := http.NewRequest(reqType, url, body)
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error creating http request for %s page: %v\n", pageName, err)
@@ -137,6 +136,9 @@ func httpReq(reqType string, payloadType string, url string, body io.Reader, pag
         } else {
             req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
         }
+    }
+    if referer != "" {
+        req.Header.Set("Referer", referer)
     }
     if client == nil {
         jar, err := cjar.New(nil)
@@ -155,19 +157,20 @@ func httpReq(reqType string, payloadType string, url string, body io.Reader, pag
 }
 
 func httpGet(url string, pageName string) (*http.Response) {
-    resp := httpReq("GET", "", url, nil, pageName)
+    resp := httpReq("GET", "", url, "", nil, pageName)
     return resp
 }
 
-func httpPost(url string, values url.Values, pageName string) (*http.Response) {
+func httpPost(url string, referer string, values url.Values, pageName string) (*http.Response) {
     body := strings.NewReader(values.Encode())
-    resp := httpReq("POST", "", url, body, pageName)
+    resp := httpReq("POST", "", url, referer, body, pageName)
     return resp
 }
 
 func httpPostJson(url string, json string, pageName string) (*http.Response) {
     body := strings.NewReader(json)
-    resp := httpReq("POST", "json", url, body, pageName)
+    referer := ""
+    resp := httpReq("POST", "json", url, referer, body, pageName)
     return resp
 }
 
@@ -217,19 +220,16 @@ func docSearch(doc *ghtml.HtmlDocument, elementName string, pageName string, xpa
 
 func getEntryPage() {
     // only reason to load entry page is to get the cookies in the cookie jar
-    resp := httpGet(ROUTERURL + ENTRYPARAMS, "entry")
+    resp := httpGet(ROUTERURL, "entry")
     resp.Body.Close()
 }
 
 func submitUsername() (*http.Response) {
-    values := url.Values{"USERID":       {USERNAME}, 
-                         "requestCmdId": {"VALIDATEID"},
-                         "reqcrda":      {USERNAME},
-                         "reqcrdb":      {""},
-                         "NONCE":        {"NoNonce"},
-                         "MACHINEATTR":  {MACHINEATTR},
+    values := url.Values{
+                         "MachineAttribute":  {MACHINEATTR},
+                         "PersonalId":        {USERNAME},
                         }
-    resp := httpPost(ROUTERURL, values, "submitUsername")
+    resp := httpPost(ROUTERURL + "/Auth/Login/login", "", values, "submitUsername")
     return resp
 }
 
@@ -259,90 +259,37 @@ func getChallengeAnswer(challengeQuestion string) (string) {
     return ""  // never reached
 }
 
-func submitChallenge(usernameResp *http.Response) (*http.Response, string) {
+func submitChallenge(usernameResp *http.Response) (*http.Response) {
     doc := parsePage(usernameResp, "challenge")
-
-    xpath := `/html/body/table[3]/tr/td[3]/form/table[2]/tr/td/table/tr[2]/td[3]/table/tr[6]/td[2]/text()`
+    xpath := `//input[contains(@name, 'StepUpShieldQuestion.QuetionText')]/@value`
     mustFind := true
     challengeQuestion := fmt.Sprintf("%s", docSearch(doc, "challenge question", "challenge", xpath, mustFind)[0])
-
-    xpath = `/html/body/table[3]/tr/td[3]/form/table[2]/tr/td/table/tr[2]/td[3]/table/tr[3]/td[3]/input/@value`
-    loginSessionId := fmt.Sprintf("%s", docSearch(doc, "LOGINSESSIONID", "challenge", xpath, mustFind)[0])
-
-    xpath = `//input[@type="hidden"][@name="BALDERDASH"]/@value`
-    balderdash:= fmt.Sprintf("%s", docSearch(doc, "BALDERDASH", "challenge", xpath, mustFind)[0])
 
     doc.Free()
 
     challengeAnswer := getChallengeAnswer(challengeQuestion)
 
-    values := url.Values{"requestCmdId":                      {"VALIDATECHALLENGE"},
-                         "CHALLENGETYPE":                     {"QA"},
-                         "ANSWER":                            {challengeAnswer},
-                         "CHALLENGEANSWER":                   {challengeAnswer},
-                         "MACHINEATTR":                       {MACHINEATTR},
-                         "doubleClick":                       {"1"},
-                         "USEDSINGLEACCESSCODE":              {"FALSE"},
-                         "EASTEPUPCHECKRESPONSESTEPUPREASON": {"ENROLLED"},
-                         "TYPE":                              {"ALPHANUM"},
-                         "BALDERDASH":                        {balderdash},
+    values := url.Values{"MachineAttribute":                      {MACHINEATTR},
+                         "StepUpShieldQuestion.Answer":           {challengeAnswer},
+                         "StepUpShieldQuestion.AnswerFormat":     {"ALPHANUM"},
+                         "StepUpShieldQuestion.AnswerMaxLength":  {"40"}, 
+                         "StepUpShieldQuestion.QuestionText":     {challengeQuestion},
+                         "StepUpShieldQuestion.RegisterComputer": {"false"},
                         }
-   resp := httpPost(ROUTERURL, values, "challenge")
-   return resp, loginSessionId
+   resp := httpPost(ROUTERURL + "/Auth/Login/StepUpCheck", "", values, "challenge")
+   return resp
 }
 
-func submitPassword(challengeResp *http.Response, loginSessionId string) (*http.Response) {
+func submitPassword(challengeResp *http.Response) (*ghtml.HtmlDocument) {
     doc := parsePage(challengeResp, "password")
-
-    xpath := `//input[@type="hidden"][@name="BALDERDASH"]/@value`
-    mustFind := true
-    balderdash:= fmt.Sprintf("%s", docSearch(doc, "BALDERDASH", "password", xpath, mustFind)[0])
-
     doc.Free()
 
-    values := url.Values{"requestCmdId":                      {"Logon"},
-                         "PSWD":                              {PASSWORD},
-                         "LOGINSESSIONID":                    {loginSessionId},
-                         "doubleClick":                       {"1"},
-                         "USEDSINGLEACCESSCODE":              {"FALSE"},
-                         "EASTEPUPCHECKRESPONSESTEPUPREASON": {"ENROLLED"},
-                         "BALDERDASH":                        {balderdash},
+    values := url.Values{"userid":    {USERNAME},
+                         "password":  {PASSWORD},
                         }
-    resp := httpPost(ROUTERURL, values, "password")
-    return resp
-}
-
-func handleMessageToUser(passwordResp *http.Response) (*ghtml.HtmlDocument) {
-    doc := parsePage(passwordResp, "passwordResponse")
-    
-    xpath := `//img[contains(@alt, 'View Again Later')]`
-    mustFind := false
-    found := docSearch(doc, "ViewAgainLater", "handleMessageToUser", xpath, mustFind)
-    if found != nil {
-        values := url.Values{"requestCmdId":                      {"SubmitRIBNotification"},
-                             "NEWENTERPRISESESSION":              {"TRUE"},
-                             "responseIdPostNotification":        {"DisplayAccountSummaryPage"},
-                             "viewAgainLater":                    {"true"},
-                            }
-        resp := httpPost(ROUTERURL, values, "handleMessageToUser")
-
-        doc = parsePage(resp, "handleMessageToUser_submitViewAgainLater")
-    }
-
-    return doc 
-}
-
-func handleMMSSODoc(mmssoDoc *ghtml.HtmlDocument) (*ghtml.HtmlDocument) {
-    xpath := `//form[contains(@name, 'MMSSO')]/@action`
-    mustFind := true
-
-    // we are looking for this: <form name="MMSSO" method="POST" action="https://onlinebanking.usbank.com/USB/LoginLanding.aspx?Dest=CustomerDashboard&amp;RIBALIVEURL=https%3A%2F%2Fwww4.usbank.com%2FinternetBanking%2FHeartBeatServlet&amp;RIBLOGOUTURL=https%3A%2F%2Fwww4.usbank.com%2FinternetBanking%2FRequestRouter%3FrequestCmdId%3DLogout&amp;RIBACCOUNTSURL=https%3A%2F%2Fwww4.usbank.com%2FinternetBanking%2FRequestRouter%3FrequestCmdId%3DDisplayAccountSummaryPage">
-    mmssoFormAction := docSearch(mmssoDoc, "FormNamedMMSSO", "handleMMSSODoc", xpath, mustFind)[0].Content()
-
-    resp := httpPost(mmssoFormAction, nil, "handleMMSSODoc")
-
-    accountBalancesDoc := parsePage(resp, "handleMMSSODoc")
-    fmt.Printf("accountBalancesDoc=%+v\n", accountBalancesDoc)
+    resp := httpPost(ROUTERURL + "/access/oblix/apps/webgate/bin/webgate.dll?/Auth/Signon/Signon",
+                     "https://onlinebanking.usbank.com/Auth/Login/Password", values, "password")
+    accountBalancesDoc := parsePage(resp, "submitPassword")
     return accountBalancesDoc
 }
 
@@ -436,7 +383,7 @@ func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) {
     // find the index of first checking account
     for _, acct := range UserAndAccounts.AccountBalancesResponse {
         if acct.AccountType == "CHECKING" {
-            fmt.Printf("acctIndx=%f", acct.Index)
+            //fmt.Printf("acctIndx=%f", acct.Index)
             acctIndex = acct.Index
         }
     } 
@@ -494,11 +441,9 @@ func main() {
         usage()
     }
     getEntryPage()
-    usernameResp := submitUsername()                                // returns challenge entry page
-    challengeResp, loginSessionId := submitChallenge(usernameResp)  // returns password entry page
-    passwordResp := submitPassword(challengeResp, loginSessionId)   // returns account balances page
-    mmssoDoc := handleMessageToUser(passwordResp)                   // returns an intermediate MMSSO page, which just has a form that is autoclicked via body.onLoad
-    accountBalancesDoc := handleMMSSODoc(mmssoDoc)                  // returns account balances doc
+    usernameResp := submitUsername()                    // returns challenge entry page
+    challengeResp := submitChallenge(usernameResp)      // returns password entry page
+    accountBalancesDoc := submitPassword(challengeResp) // returns account balances page
     file, err := os.Create(outputFile)
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error opening output file \"%s\" for writing: %v\n", outputFile, err)

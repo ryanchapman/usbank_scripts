@@ -33,6 +33,7 @@
 package main
 
 import (
+    csv   "encoding/csv"
     json  "encoding/json"
           "flag"
           "fmt"
@@ -48,6 +49,7 @@ import (
           "regexp"
           "strconv"
           "strings"
+          "time"
 )
 
 const (
@@ -357,7 +359,7 @@ func printAccountsSummary(accountBalancesDoc *ghtml.HtmlDocument, outputFile *os
     return accountBalancesDoc
 }
 
-func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) {
+func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) (acctUrlKey string, acctIndexInt int) {
     mustFind := true
     pageJavascript := fmt.Sprintf("%s", docSearch(doc, "CDDashBoardHelper.urls.AccountDashboard", "pendingTransactions", `//script[contains(text(), 'CDDashBoardHelper.urls.AccountDashboard')]`, mustFind)[0])
 
@@ -373,7 +375,7 @@ func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) {
     // Strip all but "/USB/af(51wu9DKg8Sf5bqSWTRi5)/AccountDashboard/Index"
     //re = regexp.MustCompile(`CDDashBoardHelper\.urls\.AccountDashboard\s*?=\s*?([^;]*?);`)
     re = regexp.MustCompile(`[^/]*?/USB/([^/]*?)/.*?`)
-    acctUrlKey := re.FindStringSubmatch(acctDashboardUrl)[1]
+    acctUrlKey = re.FindStringSubmatch(acctDashboardUrl)[1]
     if acctUrlKey == "" {
         fmt.Fprintf(os.Stderr, "Could not find key (usually looks like /USB/key/AccountDashboard/Index) in AccountDashboard URL \"%s\"\n", acctDashboardUrl)
         os.Exit(1)
@@ -419,6 +421,47 @@ func printPendingTransactions(doc *ghtml.HtmlDocument, outputFile *os.File) {
     }
     fmt.Fprintf(outputFile, "<tr><td colspan=3 align=left><b>TOTAL</b></td><td align=right>$%2.2f</td></tr>\n", totalPending)
     fmt.Fprintf(outputFile, "</table>\n")
+    acctIndexInt = int(acctIndex)
+    return acctUrlKey, acctIndexInt
+}
+
+func printTransactionsFromLast3Days(acctUrlKey string, acctIndex int, outputFile *os.File) {
+    now := time.Now()
+    minus72h, err := time.ParseDuration("-72h")
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Could not figure out the date three days ago")
+        os.Exit(1)
+    }
+    time3daysago := now.Add(minus72h)
+    today := fmt.Sprintf("%02d/%02d/%04d", now.Month(), now.Day(), now.Year())
+    threedaysago := fmt.Sprintf("%02d/%02d/%04d", time3daysago.Month(), time3daysago.Day(), time3daysago.Year())
+    url := fmt.Sprintf(`https://onlinebanking.usbank.com/USB/%s/AccountDashboard/Download.aspx?index=%d&from=%s&to=%s&type=csv`,
+                       acctUrlKey, acctIndex, threedaysago, today)
+    resp := httpGet(url, "downloadTransactionsCSV")
+    csvreader := csv.NewReader(resp.Body)
+    transactions, err := csvreader.ReadAll()
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Could not download transactions as a CSV file. HTTP GET %s failed: %v\n", url, err)
+        os.Exit(1)
+    }
+    resp.Body.Close()
+    
+    fmt.Fprintf(outputFile, "<p><h3>Transactions From Last Three Days</h3></p>\n")
+    fmt.Fprintf(outputFile, "<table width=586 border=0>\n")
+    //"Date","Transaction","Name","Memo","Amount"
+    fmt.Fprintf(outputFile, "<tr><td>Date</td><td>Debit/Credit</td><td>Description</td><td align=right>Amount</td></tr>\n")
+    for i, trx := range transactions {
+        if i == 0 {
+            continue
+        }
+        fmt.Fprintf(outputFile, "<tr>\n")
+        fmt.Fprintf(outputFile, "<td>%s</td>\n", trx[0])
+        fmt.Fprintf(outputFile, "<td>%s</td>\n", trx[1])
+        fmt.Fprintf(outputFile, "<td>%s</td>\n", trx[2])
+        fmt.Fprintf(outputFile, "<td align=right>%s</td>\n", trx[4])
+        fmt.Fprintf(outputFile, "</tr>\n")
+    }
+    fmt.Fprintf(outputFile, "</table>\n")
 }
 
 var outputFile string
@@ -450,7 +493,8 @@ func main() {
         os.Exit(1)
     }
     doc := printAccountsSummary(accountBalancesDoc, file)
-    printPendingTransactions(doc, file)
+    acctUrlKey, acctIndex := printPendingTransactions(doc, file)
+    printTransactionsFromLast3Days(acctUrlKey, acctIndex, file)
     doc.Free()
     fmt.Fprintf(file, "</body></html>\n")
     file.Close()

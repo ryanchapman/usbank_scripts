@@ -306,10 +306,14 @@ func printAccountsSummary(accountBalancesDoc *ghtml.HtmlDocument, outputFile *os
         os.Exit(1)
     }
     userAndAccountsJson := userAndAccountsJsonArray[0]
-   
+ 
     // Strip "CommonDataHelper.UserAndAccountsFromServer = " from beginning of json; also remove ending semicolon
-    re = regexp.MustCompile(`CommonDataHelper\.UserAndAccountsFromServer\s*?=\s*?([^;]*?);`)
+    re = regexp.MustCompile(`CommonDataHelper\.UserAndAccountsFromServer\s*?=\s*?(.*);`)
     userAndAccountsJson = re.ReplaceAllString(userAndAccountsJson, "$1")
+    len := len(userAndAccountsJson)
+    if userAndAccountsJson[len-1] == ';' {
+        userAndAccountsJson = strings.TrimSuffix(userAndAccountsJson, ";")
+    }
 
     err := json.Unmarshal([]byte(userAndAccountsJson), &UserAndAccounts)
     if err != nil {
